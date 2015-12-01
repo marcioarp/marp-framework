@@ -1,5 +1,5 @@
 {
-    "name": "marcioarp/marpFramework",
+    "name": "marcioarp/marp-framework",
     "description": "Mini framwork to create API",
     "require": {
         "php": ">=5.3.0",
