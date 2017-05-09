@@ -1,5 +1,7 @@
 <?php 
 
+//namespace plugin;
+
 //Esta classe contém métodos necessário para executar diversas funções comuns em todo sistema.
 class Util {
 	private $conexao; //Conexão ao BD postgres do 
@@ -27,57 +29,22 @@ class Util {
 		$this->log .= '<b>'.date('H:i:s').'</b> - '.$log." <br>\r\n";
 	}
 	
-	static function timeUTC2Local($data) {
-		$data = strtotime($data);
-		$retorno = date('H:i:s',$data);
-		return $retorno;
-	}
-	
-
-	static function dateUTC2Local($data) {
-		$data = strtotime($data);
-		$retorno = date('Y-m-d',$data);
-		return $retorno;
-	}
-
-	static function dateTimeUTC2Local($data) {
-		$data = strtotime($data);
-		$retorno = date('Y-m-d H:i:s',$data);
-		return $retorno;
-	}
-
-	//Converte data do formato utilizado em Banco de Dados para BR 
-	static function DataBD2Br($data) {
-		$Datahora = explode(" ",$data);
-		$dt = $Datahora[0];
-		if (!isset($Datahora[1])) $Datahora[1]='';
-		$hr = $Datahora[1];
-		$retorno = implode("/",array_reverse(explode("-",$dt)));
-		if (strlen($hr) > 1) 
-			$retorno .= " ".$hr;
-		return $retorno;
-	}
-
 	static function lcfirst($str) {
 		$str[0] = strtolower($str[0]);
 		return $str;
 	}
-
-	//Converte data do formato BR para o formato utilizado em Banco de Dados
-	static function DataBr2BD($data) {
-		$Datahora = explode(" ",$data);
-		$dt = $Datahora[0];
-		if (isset($Datahora[1])) {
-			$hr = $Datahora[1];
-		} else {
-			$hr = '';
-		}
-		//if (!isset($Datahora[1])) $Datahora[1]='';
-		$retorno = implode("-",array_reverse(explode("/",$dt)));
-		if (strlen($hr) > 1) 
-			$retorno .= " ".$hr;
-		return $retorno;
-	}
+	/*
+	 * FUNÇÕES DEPRECIADAS
+	 * UTILIZE DATETUTILS
+	 */
+	static function timeUTC2Local($data) {return DateUtil::timeUTC2Local($data);}
+	static function dateUTC2Local($data) {return DateUtil::dateUTC2Local($data);}
+	static function dateTimeUTC2Local($data) {return DateUtil::dateTimeUTC2Local($data);}
+	static function DataBD2Br($data) {return DateUtil::DataBD2Br($data);}
+	static function DataBr2BD($data) {return DateUtil::DataBr2BD($data);}
+	/*end date utils */
+	
+	
 	
 	//Converte número do formato BR TO US
 	static function DecimalBr2BD($valor) {
@@ -110,10 +77,6 @@ class Util {
 	
 	
 	
-	//Remove acento da string
-	static function removeAcento($texto) {
-		return preg_replace("[^a-zA-Z0-9 ]", "", strtr($texto, "áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ", "aaaaeeiooouucAAAAEEIOOOUUC"));
-	}
 	
 
 	
@@ -189,11 +152,6 @@ class Util {
 	
 	}
 	
-	//retona a extenççao de um arquivo
-	static function getExtensaoArquivo($arquivo) {
-		return strtolower(end(explode(".", $arquivo)));
-	}
-
 	
 	
 	// Retorna horário local de uma UF em GMT
@@ -252,16 +210,6 @@ class Util {
 	}
 	
 	
-	//Substitui " por \", ' por \" e \ por \\ dentro da string
-	//Dever ser usada para enviar comandos SQL ao postgres.
-	static function RemoveAspas($texto) {
-		//$retorno  = str_replace('\\','\\\\',$texto);
-		//$retorno = str_replace('"','\"',$retorno);
-		//$retorno = str_replace("'","\'",$retorno);
-		$retorno = str_replace("'","''",$texto);
-		return $retorno;
-	
-	}
 	
 	
 
@@ -635,75 +583,7 @@ class Util {
 	
 	
 
-	//Criar pastas em diretório caso não exista de forma recursiva
-	function recursive_mkdir($path,$mode=0775,$diretorio_separador='/') {
-		$old = umask(0);
-		$dirs = explode($diretorio_separador , $path);
-		$count = count($dirs);
-		$path = '.';
-		for ($i = 0; $i < $count; ++$i) {
-			$path .= $diretorio_separador . $dirs[$i];
-			if (!is_dir($path) && !mkdir($path, $mode)) {
-				umask($old);
-				return false;
-			}
-		}
-		umask($old);
-		return true;
-	}
-	
-	//Compara dois diretório e retorna o link relativo entre eles.
-	//dir2 = diretório destino
-	//dir1 = ditretório origem
-	function diretorioRelativo($dir2,$dir1=false,$barra='auto') {
-		if ($dir1==false) $dir1 = dirname(__FILE__);
-		if ($barra == 'auto') {
-			if (PHP_OS == 'Linux') {
-				$barra = '/';
-			} else {
-				$barra = '\\';
-			}
-		}
-		
-		if (strlen($dir2) > strlen($dir1)) {
-			$dirtemp = substr($dir2, 0, strlen($dir1));
-			if ($dirtemp == $dir1) {
-				$dirtemp = substr($dir2,strlen($dir1)+1);
-				return $dirtemp;
-			}
-		} else if ($dir2 == $dir1) {
-			return '';
-		}
-		
-		$ultimocaracter = substr($dir2,-1);
-		if ($ultimocaracter == $barra) $dir2 = substr($dir2,0,-1); 
 
-		$arrDir1 = explode($barra, $dir1);
-		$arrDir2 = explode($barra, $dir2);
-		$diferente = false;
-		$str='';
-		for ($i=0; $i<sizeof($arrDir1); $i++) {
-			if (!$diferente) {
-				if ($arrDir1[$i] != $arrDir2[$i]) {
-					$pos = $i;
-					$diferente = true;
-				}
-			}
-			
-			if ($diferente) {
-				$str.='..'.$barra;
-			}
-			
-		}
-		for ($i=$pos; $i<sizeof($arrDir2); $i++) {
-			$str .= $arrDir2[$i].$barra;
-		}
-		//$str .= $barra;
-		return  $str;
-		
-		
-	}
-	
 	//Verifica se algum item do array contém o valor informado em $str
 	//Retorna true caso encontre
 	//o parâmetro parcial compara se parte da string está contida no em algum item array
@@ -720,52 +600,8 @@ class Util {
 		return $retorno;
 	}
 	
-	//Gerar um id tipo hash aleatório
-	static function getHash() {
-		return  md5(uniqid(rand(), true));
-	}
 	
-	//Função para Criptografar uma String
-	static function encrypt($pure_string,$encryption_key=false) {
-		if (!$encryption_key) $encryption_key = HASH_SEGURANCA;
-		$pure_string =  base64_encode( $pure_string);
-		$iv_size = mcrypt_get_iv_size(MCRYPT_BLOWFISH, MCRYPT_MODE_ECB);
-		$iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);
-		$encrypted_string = mcrypt_encrypt(MCRYPT_BLOWFISH, $encryption_key, utf8_encode($pure_string), MCRYPT_MODE_ECB, $iv);
-		$encrypted_string = Util::strToHex( $encrypted_string);
-		return ( $encrypted_string);
-	}
-	
-	//Função para Desriptografar uma String
-	static function decrypt($encrypted_string,$encryption_key=false) {
-		if (!$encryption_key) $encryption_key = HASH_SEGURANCA;
-		$encrypted_string = Util::hexToStr($encrypted_string);
-		$iv_size = mcrypt_get_iv_size(MCRYPT_BLOWFISH, MCRYPT_MODE_ECB);
-		$iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);
-		$decrypted_string = mcrypt_decrypt(MCRYPT_BLOWFISH, $encryption_key, $encrypted_string, MCRYPT_MODE_ECB, $iv);
-		return base64_decode( $decrypted_string);
-	}	
-	
-	//Converte uma string em valores hexadecimais
-	static function strToHex($string) {
-		$hex = '';
-		for ($i=0; $i<strlen($string); $i++){
-			$ord = ord($string[$i]);
-			$hexCode = dechex($ord);
-			$hex .= substr('0'.$hexCode, -2);
-		}
-		return strToUpper($hex);
-	}
-	
-	//Converte valores hexadecimais em string
-	static function hexToStr($hex) {
-		$string='';
-		for ($i=0; $i < strlen($hex)-1; $i+=2){
-			$string .= chr(hexdec($hex[$i].$hex[$i+1]));
-		}
-		return $string;
-	}
-	
+
 	//Retorna o id do município localizado em uma latitude / longitude específica.
 	function getIdMunicLatLon($lat,$lon) {
 		$sql = "select id_municipio from ger_municipio
@@ -822,39 +658,7 @@ class Util {
     	return preg_replace("/[^0-9]/", "", $str);
 	}
 	
-	// Function to get the client IP address
-	static function get_client_ip() {
-	    $ipaddress = '';
-	    if (isset($_SERVER['HTTP_CLIENT_IP']))
-	        $ipaddress = $_SERVER['HTTP_CLIENT_IP'];
-	    else if(isset($_SERVER['HTTP_X_FORWARDED_FOR']))
-	        $ipaddress = $_SERVER['HTTP_X_FORWARDED_FOR'];
-	    else if(isset($_SERVER['HTTP_X_FORWARDED']))
-	        $ipaddress = $_SERVER['HTTP_X_FORWARDED'];
-	    else if(isset($_SERVER['HTTP_FORWARDED_FOR']))
-	        $ipaddress = $_SERVER['HTTP_FORWARDED_FOR'];
-	    else if(isset($_SERVER['HTTP_FORWARDED']))
-	        $ipaddress = $_SERVER['HTTP_FORWARDED'];
-	    else if(isset($_SERVER['REMOTE_ADDR']))
-	        $ipaddress = $_SERVER['REMOTE_ADDR'];
-	    else
-	        $ipaddress = 'UNKNOWN';
-	    return $ipaddress;
-	}
-	
-	static function getHeaderVarClient($varName) {
-		$headers = apache_request_headers();
-		
-		foreach ($headers as $header => $value) {
-			//echo $header.'>'.$value."\r\n";
-			if ($header == $varName) {
-				return $value;
-			}
-		}
-		//exit;
-		return false;
-	}	
-	
+
 	
 	
 	

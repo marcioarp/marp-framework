@@ -1,5 +1,7 @@
 <?php
 
+//namespace plugin;
+
 class JSONFuncs {
 	public static function send2Browser($json) {
 		ob_clean();
@@ -11,5 +13,9 @@ class JSONFuncs {
 		$json = json_encode($arr);
 		echo JSONFuncs::send2Browser($json);
 		exit;
+	}
+	
+	public static function array2Json($arr) {
+		return json_encode($arr);
 	}
 }

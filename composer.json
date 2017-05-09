@@ -1,9 +1,0 @@
-{
-    "name": "marcioarp/marp-framework",
-    "description": "Mini framwork to create API",
-    "minimum-stability": "stable",
-	"prefer-stable": true,
-    "require": {
-        "php": ">=5.1.0"
-    }
-}

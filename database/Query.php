@@ -1,7 +1,11 @@
 <?php
 
-//require_once('bd_field.php');
- 
+//namespace database;
+
+require_once(API_PATH.'plugin/CryptUtil.php');
+require_once(API_PATH.'plugin/DateUtil.php');
+//require_once(API_PATH.'plugin/NumberUtil.php');
+  
 class Query {
 	//@var Connection
 	protected $cnx;
@@ -13,7 +17,7 @@ class Query {
 	protected $arrCamposUpdate = '';
 
 	private $dados=false;
-	private $posicao=0;
+	private $__posicao=0;
 	private $qtdRegistros=0;
 	private $_eof=true;
 	private $_bof=true;
@@ -21,7 +25,9 @@ class Query {
 	private $erro = false;
 	
 	public $log='';
+	public $warning ='';
 	public $limit = "";
+	public $order_by = "";
 	
 	//$cnx deve ser uma conexão com o banco de dados
 	function __construct($cnx) {
@@ -40,10 +46,15 @@ class Query {
 	public function getErro() {return $this->erro;}	
 
 	
+	public function addLog($log) {
+		$this->log .= "<b>".date('d/m/Y H:i:s').'</b> '.$log."\r\n";
+	}
 
-	//parametros deve ser :
-	//$arr[0][0] = 'nome_parametro'; $arr[0][1]= 'valor'; $arr[0][2] = 'text' ou 'numeric'; $arr[0][3] = operador (=,>=,<=,like,etc)
-	//return true / false
+	/**
+	 * parametros deve ser :
+	 * $arr[0][0] = 'nome_parametro'; $arr[0][1]= 'valor'; $arr[0][2] = 'text' ou 'numeric'; $arr[0][3] = operador (=,>=,<=,like,etc)
+	 * @return boolean true / false
+	 */
 	public function busca($arrParametros=false) {
 		$sql = $this->sqlSelect;
 		$tagWhere = ' where ';
@@ -67,6 +78,7 @@ class Query {
 				$tagWhere = ' and ';
 			}
 		}
+		$sql .= ' '.$this->order_by;
 		$sql .= ' '.$this->limit;
 		//print_r($arrParametros);
 		//echo $sql.'<br>'; exit;
@@ -77,6 +89,10 @@ class Query {
 	function buscaSQL($sql) {
 		//echo "aki"; exit;
 		$rs = $this->cnx->runSQL($sql);
+		if (!$rs) {
+			$this->erro .= "\r\n ".$this->cnx->getErro().' ';
+			return false;
+		}
 		$registros = $this->cnx->recordCount($rs);
 		//echo $registros; exit; 
 		if ($registros > 0) {
@@ -100,7 +116,7 @@ class Query {
 	//a chave de ser um unico campo numerico
 	public function searchByKey($id) {
 		$chave = $this->getFieldKey();
-		return $this->busca(array(array($chave->getName(),$id,'numeric')));
+		return $this->busca(array(array($chave->getName(),$id,'text')));
 	}
 	
 	//coloca todo conteúdo do do resource em um array
@@ -116,7 +132,7 @@ class Query {
 			$this->_bof = false;
 			$this->_eof = false;
 			$this->associaDados($this->dados[0]);
-			$this->posicao = 0;
+			$this->__posicao = 0;
 			
 		}
 	}
@@ -124,14 +140,19 @@ class Query {
 	
 	//recebe um array de dados e carrega no obj
 	public function associaDados($v) {
+		//print_r($v);
 		for ($i=0;$i<sizeof($this->arrCampos);$i++) {
 			$nomeCampo = $this->arrCampos[$i];
 			$campo = $this->$nomeCampo;
 			if (FALSE) $campo = new BDField;
 			if (isset($v[$nomeCampo])) {
 				$campo->setValueFromBD($v[$nomeCampo]);
+				//echo $v[$nomeCampo];
+			} else {
+				$campo->setNull();
 			}
-		}	
+		}
+		//echo $this->nasc->getValue();
 	} 
 	
 	
@@ -143,6 +164,9 @@ class Query {
 		$rs = $this->cnx->runSQL($sql);
 		if ($this->cnx->getErro()) {
 			return false;
+		} if ($this->cnx->affectedRows() <= 0) {
+		 	$this->warning .= "\r\n".'Comando executado com sucesso porém nada foi alterado';
+			return true;
 		} else {
 			return true;
 		}
@@ -154,7 +178,10 @@ class Query {
 			$nomeCampo =$this->arrCampos[$i]; 
 			$campo = $this->$nomeCampo;
 			if (false) $campo = new BDField();
-			if (!$campo->isValidValue()) {$retorno = false; $this->erro .= "\r\n". $campo->getDisplayName().' inválido'; } 
+			if (!$campo->isValidValue()) {
+				$retorno = false; 
+				$this->erro .= "\r\n". $campo->getDisplayName().' '.$campo->getValue().' é inválido'; 
+			} 
 		}
 		return $retorno;
 		
@@ -164,6 +191,7 @@ class Query {
 	public function insere() {
 		$valido = $this->validaDados();
 		if (!$valido) return false; 
+		$this->erro = false;
 		$sql = $this->preparaSQL($this->sqlInsert);
 		//echo $sql; exit;
 		$this->log .= $sql."\r\n";
@@ -171,19 +199,32 @@ class Query {
 		$id = $this->cnx->lastInsertID();
 		$this->erro .= $this->cnx->getErro();
 		$campo = $this->getFieldKey();
-		$campo->setValue($id);
-		return $id > 0;
+		
+		if (!$campo) {
+			$this->log .= $this->erro;
+		} else {
+			
+			if ((isset($id)) && (strlen($campo->getValue()) < 1)) {
+				$campo->setValue($id);
+			}
+		}
+		
+		if ($this->erro) {
+			$this->log .= $this->erro;
+			return false;
+		}
+		return true;
 	}
 	
 	public function apaga() {
 		$chave = $this->getFieldKey();
 		$sql = $this->preparaSQL($this->sqlDelete);
 		$rs = $this->cnx->runSQL($sql);
+		$this->addLog($sql);
 		if ($this->cnx->getErro()) {
 			return false;
 		}
-		return !($this->searchByKey($chave->getValue()) > 0);
-		
+		return true;//!($this->searchByKey($chave->getValue()) > 0);
 	}
 	
 	//retorna o campo chave da tabela
@@ -213,9 +254,9 @@ class Query {
 	//define os dados da posical atual
 	private function goToPosicao($posicao) {
 		if ($posicao >= $this->qtdRegistros) return false;
-		$this->posicao = $posicao;
-		if (isset($this->dados[$this->posicao])) {
-			$this->associaDados($this->dados[$this->posicao]);
+		$this->__posicao = $posicao;
+		if (isset($this->dados[$this->__posicao])) {
+			$this->associaDados($this->dados[$this->__posicao]);
 			return true;
 		} else {
 			return false;
@@ -224,8 +265,8 @@ class Query {
 	
 	//vai para a proxima posicao
 	public function next() {
-		if ($this->posicao < ($this->qtdRegistros - 1)) {
-			return $this->goToPosicao($this->posicao+1);
+		if ($this->__posicao < ($this->qtdRegistros - 1)) {
+			return $this->goToPosicao($this->__posicao+1);
 		} else {
 			$this->_eof = true;
 			return false;
@@ -234,8 +275,8 @@ class Query {
 	
 	//vai para a  posicao anterior
 	public function prior() {
-		if ($this->posicao > 0) {
-			return $this->goToPosicao($this->posicao-1);
+		if ($this->__posicao > 0) {
+			return $this->goToPosicao($this->__posicao-1);
 		} else {
 			$this->_bof = true;
 			return false;
@@ -253,7 +294,11 @@ class Query {
 	}
 	
 	public function getCursorPos() {
-		return $this->posicao;
+		return $this->__posicao;
+	}
+	
+	public function recordCount() {
+		return $this->qtdRegistros;
 	}
 	
 	public function getFieldByName($name) {		
@@ -268,8 +313,9 @@ class Query {
 	}
 	
 	public function buscaByPrimaryKey($valor) {
-		$key = $this->getFieldKey();
-		return $this->busca(array(array($key->getName(),$valor,$key->getType())));
+		//$key = $this->getFieldKey();
+		//return $this->busca(array(array($key->getName(),$valor,$key->getType())));
+		return $this->searchByKey($valor);
 	}
 	
 	//JSON FUNCTIONS
@@ -277,18 +323,20 @@ class Query {
 		for ($i=0;$i<sizeof($this->arrCampos);$i++) {
 			$nomeCampo = $this->arrCampos[$i];
 			$campo = $this->$nomeCampo;
-			$retorno[$nomeCampo] =	$campo->getValue();
+			if (false) $campo = new BDField;
+			$retorno[$nomeCampo] =	$campo->getValue2UserJS();
 		}	
 		return $retorno;		
 	}
+	
 	public function getJson() {
-		return json_encode($this->preparaJson());
+		return json_encode($this->preparaJson(),JSON_NUMERIC_CHECK);
 	}
 	
 	public function getAllJson() {
 		$retorno = $this->getAllArray();
 		if ($retorno)
-			return json_encode($retorno);
+			return json_encode($retorno,JSON_NUMERIC_CHECK);
 		else 
 			return false;
 	}
@@ -320,34 +368,36 @@ class Query {
 	}
 	
 	//Recebe um JSON e associa ao obj
-	//Campos não informados serão definidos como nulos
-	public function setJSON($JsonOBJ,$setNull=true) {
+	//$setNull -> Campos não informados serão definidos como nulos
+	public function setJSON($JsonOBJ,$setNull=true) { //doc
 		$newValues = json_decode($JsonOBJ,true);
 		return $this->associaArrFromUser($newValues,$setNull) ;
 	}
 	
-	/*
-	public function associaArrFromUser($arr,$setNull=true) {
+	//setnull define como null os campos não informados pelo usuario 
+	//nomes dos campos precisam ser em lowercase
+	//para converter um array para lowercase utilize o comando
+	//$arr2 = array_change_key_case($arr,CASE_LOWER); 
+	public function associaArrFromUser($arr,$setNull=true) { //doc
 		$retorno = true;
+		//print_r($arr2);
 		for ($i=0;$i<sizeof($this->arrCampos);$i++) {
 			$nomeCampo = $this->arrCampos[$i];
 			$campo = $this->$nomeCampo;
+			if (false) $campo = new BDField();
 			if (isset($arr[$nomeCampo])) {
-				$campo->setValue($arr[$nome<?php
-	*/
-	public function associaArrFromUser($arr,$setNull=true) {
-		$retorno = true;
-		for ($i=0;$i<sizeof($this->arrCampos);$i++) {
-			$nomeCampo = $this->arrCampos[$i];
-			$campo = $this->$nomeCampo;
-			if (isset($arr[$nomeCampo])) {
-				$campo->setValue($arr[$nomeCampo]);
+				$campo->setValueFromUser($arr[$nomeCampo]);
+				$this->log .= $nomeCampo . ' => ' . $campo->getValue();
+				//echo "aki<br>";
 			} else {
+				//$campo->	
 				if($setNull) $campo->setNull();
+				$this->log .= "Campo não encontrado no array do usuário $nomeCampo\r\n";
 			}
-		}	
+		}
+		//exit;
+		if (!$this->validaDados()) return false;
 		return $retorno;
-		
 	}
 	
 	
@@ -355,23 +405,81 @@ class Query {
 
 	public function bof() {return $this->_bof;}
 	
-	//executa sql e retorna um array com todos os dados
-	//não altera nenhum atributo do objeto instanciado
-	
-	public function sql2Array($sql) {
-		$rs = $this->cnx->runSQl($sql);
-		$v = $this->cnx->fetchAll($rs,MYSQL_ASSOC,true);
-		return $v;
+	//executa o SQL
+	//atribui à lista de objs
+	//retorna a lista ao usuário
+	public function searchToUser($sql) {
+		if ($this->buscaSQL($sql) ) {
+			$r["status"] = "ok";
+			$r["msg"] = "";
+			$r["lista"] = $this->getAllArray();
+		} else {
+			if (strlen($this->getErro()) > 1) {
+				$r["status"] = "Erro";
+				$r["msg"] = $this->getErro();
+			} else {
+				$r["status"] = "ok";
+				$r["msg"] = '';
+				$r['lista'] = array(); 
+			}
+		}
+		return $r;
+		
 	}
 	
-	public function runSQL($sql) {
-		return $this->cnx->runSQL($sql);
+	public function exportXMLDelphiDataSet($dados=true) {
+		$this->first();
+		$qtd = 0;
+		$xml = '<?xml version="1.0" standalone="yes"?>
+			<DATAPACKET Version="2.0">
+				<METADATA>
+					<FIELDS>
+		';
+		//fields descriptions
+		for ($i=0;$i< sizeof($this->arrCampos);$i++) {
+			$campoNome = $this->arrCampos[$i];
+			$campo = $this->$campoNome;
+			if (false)
+				$campo = new BDField;
+			if ($campo->isInteger()) {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="i4"/>';
+			} else if ($campo->isNumeric()) {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="fixed" DECIMALS="6" WIDTH="32"/>';
+			} else if ($campo->isData()) {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="date"/>';
+			} else if ($campo->isDataHora()) {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="dateTime"/>';
+			} else if (($campo->getMaxLength()<0) || ($campo->getMaxLength()>255)) {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="bin.hex"  SUBTYPE="Text"/>';
+			} else {
+				$xml .= '<FIELD attrname="'.$this->arrCampos[$i].'" fieldtype="string" WIDTH="'.$campo->getMaxLength().'"/>';
+			}
+			$xml.="\r\n";
+		}
+		$xml .= '
+					</FIELDS>
+				</METADATA>
+				<ROWDATA>
+		';
+		//rows 
+		if ($dados) {
+			while ((!$this->eof()) ) { //&& ($qtd < 100)
+				$xml .= "<ROW ";
+				for ($i=0;$i< sizeof($this->arrCampos);$i++) {
+					$campoNome = $this->arrCampos[$i];
+					$campo = $this->$campoNome;
+					$xml .= $campoNome . '="'. str_replace('"', '&quot;',$campo->getValue()).'" ';
+				}
+				$xml .= "/>\r\n";
+				$qtd++;
+				$this->next();
+			}
+		}
+		$xml.='	</ROWDATA>
+			</DATAPACKET>
+		';		
+		
+		return $xml;
 	}
-	 
-	 
-	
-	//Este método deve ser  chamado ao final do construct de todas as classes filhas
-	//public function outrasDefinicoes () { }
 	
 }
-?>	
